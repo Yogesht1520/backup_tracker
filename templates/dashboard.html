@@ -3,7 +3,7 @@
 <head>
   <title>Backup Tracker Dashboard</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <style>
     body { font-family: 'Segoe UI', sans-serif; margin: 30px; }
     h1 { color: #333; margin-bottom: 10px; }
@@ -14,7 +14,7 @@
     .pending { background-color: #ffc107; color: black; }
     .total { background-color: #007bff; }
     .alert-box { border: 2px solid #dc3545; background: #ffe5e5; color: #b30000; padding: 10px; margin-bottom: 15px; display: none; }
-    table { border-collapse: collapse; width: 100%; }
+    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
     th, td { padding: 10px; border: 1px solid #ccc; text-align: left; }
     th { background-color: #f2f2f2; }
     .status-success { color: green; font-weight: bold; }
@@ -40,8 +40,6 @@
     <button type="submit">Create Job</button>
   </form>
 
-  <br>
-
   <table id="jobTable">
     <thead>
       <tr>
@@ -55,9 +53,9 @@
   </table>
 
   <script>
-    // Define chart globally so both loadStats and socket.on('job_update') can access it
     let chart; 
-    
+    const socket = io();
+
     async function loadJobs() {
       const res = await fetch('/api/jobs');
       const jobs = await res.json();
@@ -97,19 +95,13 @@
       } else {
         alertBox.style.display = 'none';
       }
-      
-      // FIX: Update Chart data with initial stats from the API call
+
       if (chart) {
-          chart.data.datasets[0].data = [
-              stats.success, 
-              stats.failed, 
-              stats.pending
-          ];
-          chart.update();
+        chart.data.datasets[0].data = [stats.success, stats.failed, stats.pending];
+        chart.update();
       }
     }
 
-    // Initial load + auto-refresh
     async function refreshAll() {
       await loadJobs();
       await loadStats();
@@ -118,7 +110,6 @@
     refreshAll();
     setInterval(refreshAll, 5000);
 
-    // Create job form
     document.getElementById('createJobForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const jobName = document.getElementById('jobName').value;
@@ -130,45 +121,242 @@
       document.getElementById('jobName').value = '';
       refreshAll();
     });
-  </script>
 
-  <script>
     const ctx = document.getElementById('statusChart');
-    // FIX: Initialize the chart and assign it to the global 'chart' variable
     chart = new Chart(ctx, { 
       type: 'bar',
       data: {
         labels: ['Success', 'Failed', 'Pending'],
         datasets: [{
           label: 'Job Count',
-          data: [0, 0, 0], // Initial dummy data, overwritten immediately by loadStats()
+          data: [0, 0, 0],
           backgroundColor: ['green', 'red', 'orange']
         }]
       },
       options: {
-        scales: {
-          y: {
-            beginAtZero: true // Ensures y-axis starts at zero for clarity
-          }
-        }
+        scales: { y: { beginAtZero: true } }
       }
     });
 
-    const socket = io();
     socket.on('job_update', (stats) => {
-      chart.data.datasets[0].data = [
-        stats.success, stats.failed, stats.pending
-      ];
+      chart.data.datasets[0].data = [stats.success, stats.failed, stats.pending];
       chart.update();
-
+      const alertBox = document.getElementById('alertBox');
       if (stats.failed > 0) {
-        document.getElementById('alertBox').style.display = 'block';
-        document.getElementById('alertBox').innerText =
-          `⚠️ ${stats.failed} job(s) failed!`;
+        alertBox.style.display = 'block';
+        alertBox.innerText = `⚠️ ${stats.failed} job(s) failed!`;
       } else {
-        document.getElementById('alertBox').style.display = 'none';
+        alertBox.style.display = 'none';
       }
     });
+  </script>
+
+  
+
+  <h1>🔐 Vault Management</h1>
+
+  <form id="uploadForm" enctype="multipart/form-data">
+    <input type="file" id="vaultFile" name="file" required>
+    <button type="submit">Upload & Encrypt</button>
+  </form>
+
+  <br>
+
+  <h4>Stored Encrypted Files</h4>
+  <table border="1" width="100%">
+    <thead>
+      <tr>
+        <th>Filename</th>
+        <th>Size (KB)</th>
+        <th>Last Modified</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody id="vaultTableBody">
+      <tr><td colspan="4" style="text-align:center;">Loading...</td></tr>
+    </tbody>
+  </table>
+
+  <script>
+    async function loadVaultFiles() {
+      const res = await fetch('/vault/list');
+      const files = await res.json();
+      const tbody = document.getElementById('vaultTableBody');
+      tbody.innerHTML = '';
+
+      if (files.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">No encrypted files found</td></tr>';
+        return;
+      }
+
+      files.forEach(file => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${file.name}</td>
+          <td>${file.size_kb}</td>
+          <td>${file.modified}</td>
+          <td>
+            <button onclick="downloadFile('${file.name}')">Restore</button>
+            <button onclick="verifyFile('${file.name}')">Verify</button>
+            <span id="verify-${file.name}" class="verify-status"></span>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function downloadFile(filename) {
+      const res = await fetch(`/vault/restore/${filename}`);
+      if (res.ok) {
+        alert(`File ${filename} restored successfully.`);
+        const blob = await res.blob();
+        const link = document.createElement('a');
+        link.href = window.URL.createObjectURL(blob);
+        link.download = filename.replace('.enc', '');
+        link.click();
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Failed to restore file');
+      }
+    }
+
+    document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const formData = new FormData();
+      formData.append('file', document.getElementById('vaultFile').files[0]);
+      const res = await fetch('/vault/upload', { method: 'POST', body: formData });
+      const result = await res.json();
+      alert(result.message);
+      loadVaultFiles();
+    });
+
+    async function verifyFile(filename) {
+      const statusEl = document.getElementById(`verify-${filename}`);
+      statusEl.innerText = "⏳ Verifying...";
+      try {
+        const res = await fetch(`/vault/verify/${filename}`);
+        const data = await res.json();
+        if (data.verified) {
+          statusEl.innerText = "✅";
+          statusEl.style.color = "green";
+        } else {
+          statusEl.innerText = "⚠️";
+          statusEl.style.color = "red";
+        }
+      } catch (err) {
+        statusEl.innerText = "❌";
+        statusEl.style.color = "gray";
+      }
+    }
+
+    loadVaultFiles();
+  </script>
+
+<div id="anomalyStatus" style="margin-top:30px;">
+    <span id="statusBadge"
+      style="display:inline-block;width:15px;height:15px;border-radius:50%;background-color:green;margin-right:6px;">
+    </span>
+    <strong id="statusText">System Stable</strong>
+  </div>
+
+  <h1>📊 Live System Metrics</h1>
+  <div style="width:100%; max-width:900px;">
+    <canvas id="liveMetricsChart"></canvas>
+  </div>
+
+  <script>
+
+    
+
+    // --- Real-time Metrics Chart ---
+  const ctxLive = document.getElementById('liveMetricsChart').getContext('2d');
+  const liveChart = new Chart(ctxLive, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [
+        {
+          label: 'CPU %',
+          borderColor: 'red',
+          borderWidth: 2,
+          pointRadius: 3,
+          fill: false,
+          tension: 0.4,      // 👈 Smooth line between points
+          spanGaps: true,    // 👈 Connects missing data points
+          data: []
+        },
+        {
+          label: 'RAM %',
+          borderColor: 'blue',
+          borderWidth: 2,
+          pointRadius: 3,
+          fill: false,
+          tension: 0.4,
+          spanGaps: true,
+          data: []
+        },
+        {
+          label: 'Disk %',
+          borderColor: 'green',
+          borderWidth: 2,
+          pointRadius: 3,
+          fill: false,
+          tension: 0.4,
+          spanGaps: true,
+          data: []
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      animation: false, // 👈 makes updates instant
+      scales: {
+        y: {
+          beginAtZero: true,
+          max: 100,
+          title: { display: true, text: 'Usage (%)' }
+        },
+        x: {
+          title: { display: true, text: 'Timestamp' },
+          ticks: { maxRotation: 45, minRotation: 45 }
+        }
+      },
+      plugins: {
+        legend: { position: 'top' }
+      }
+    }
+  });
+
+  // --- Receive Live Metrics ---
+  socket.on('metrics_update', data => {
+    const { timestamp, cpu, ram, disk } = data;
+
+    if (liveChart.data.labels.length > 20) {
+      liveChart.data.labels.shift();
+      liveChart.data.datasets.forEach(ds => ds.data.shift());
+    }
+
+    liveChart.data.labels.push(timestamp);
+    liveChart.data.datasets[0].data.push(cpu);
+    liveChart.data.datasets[1].data.push(ram);
+    liveChart.data.datasets[2].data.push(disk);
+    liveChart.update();
+  });
+
+  // --- Realtime Anomaly Alerts ---
+  socket.on('anomaly_alert', data => {
+    const badge = document.getElementById("statusBadge");
+    const text = document.getElementById("statusText");
+    badge.style.backgroundColor = "red";
+    text.textContent = `⚠️  ${data.metric} Alert: ${data.value}%`;
+    text.style.color = "red";
+
+    document.body.style.transition = 'background-color 0.5s ease';
+    document.body.style.backgroundColor = '#ffe6e6';
+    setTimeout(() => document.body.style.backgroundColor = 'white', 1000);
+
+    console.warn("Realtime anomaly:", data.message);
+  });
   </script>
 </body>
 </html>

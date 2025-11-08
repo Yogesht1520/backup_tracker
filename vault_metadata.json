@@ -1,0 +1,20 @@
+[
+    {
+        "file_name": "sample.txt",
+        "encrypted_file": "sample.txt_20251107_003017.enc",
+        "timestamp": "20251107_003017",
+        "sha256": "d46bae5e9521f65911629d6f30decd5297383f52358390bccaf7e3063d4e26a8"
+    },
+    {
+        "file_name": "backup.txt",
+        "encrypted_file": "backup.txt_20251107_004459.enc",
+        "timestamp": "20251107_004459",
+        "sha256": "97544b1a18825bb2163d5b439c30dc4040cf50bb9c26bb65ec865adf657fee7a"
+    },
+    {
+        "file_name": "backup.txt",
+        "encrypted_file": "backup.txt_20251107_005505.enc",
+        "timestamp": "20251107_005505",
+        "sha256": "af215eaab7b194f6ac8b694186a5117e821df4613007d462f22d2b19235a97a1"
+    }
+]

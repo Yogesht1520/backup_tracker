@@ -1,0 +1,36 @@
+// Online Java Compiler
+// Use this editor to write, compile and run your Java code online
+import java.util.Scanner;
+class Main {
+    public static void main(String[] args) {
+        int[][] arr = {{1,2,3},{4,5,6},{7,8,9}};
+        
+        for(int i = 0; i<arr.length;i++){
+            for(int j = 0; j < i; j++){
+                int temp = arr[i][j];
+                arr[i][j] = arr[j][i];
+                arr[j][i] = temp;
+            }
+        }
+        for(int i = 0; i< arr.length;i++){
+            
+                int p = 0;
+                int q = arr[i].length -1;
+                while(p < q){
+                    int temp = arr[i][p];
+                    arr[i][p] = arr[i][q];
+                    arr[i][q] = temp;
+                    
+                    p++;
+                    q--;
+                }               
+            
+        }
+        for(int i = 0; i<arr.length;i++){
+            for(int j = 0; j < arr[0].length; j++){
+                       System.out.print(arr[i][j]+" ");
+            }
+            System.out.println();
+        }
+    }
+}
